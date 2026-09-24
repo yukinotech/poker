@@ -106,6 +106,7 @@ class PokerGame {
       log: document.querySelector("#action-log"),
       opponents: document.querySelector("#opponent-count"),
       chips: document.querySelector("#starting-chips"),
+      buyIns: document.querySelector("#buy-in-count"),
     };
     this.generation = 0;
     this.bindEvents();
@@ -133,7 +134,9 @@ class PokerGame {
     this.generation += 1;
     const opponentCount = clamp(Number(this.ui.opponents.value) || 3, 1, 5);
     const startingChips = Math.max(200, Number(this.ui.chips.value) || 2000);
-    this.players = [{ id: 0, name: "你", human: true, chips: startingChips }];
+    this.startingChips = startingChips;
+    this.maxBuyIns = clamp(Number(this.ui.buyIns.value) || 3, 1, 5);
+    this.players = [{ id: 0, name: "你", human: true, chips: startingChips, buyInsUsed: 1 }];
     for (let i = 1; i <= opponentCount; i += 1) {
       this.players.push({
         id: i,
@@ -142,6 +145,7 @@ class PokerGame {
         chips: startingChips,
         aggression: 0.35 + Math.random() * 0.4,
         bluffRate: 0.06 + Math.random() * 0.14,
+        buyInsUsed: 1,
       });
     }
     this.human = this.players[0];
@@ -155,10 +159,11 @@ class PokerGame {
 
   startNextHand(first = false) {
     if (!first) {
-      if (this.human.chips <= 0 || !this.players.some((player) => !player.human && player.chips > 0)) {
+      if (!this.canContinueMatch()) {
         this.newGame();
         return;
       }
+      this.rebuyBustedPlayers();
       this.dealer = this.nextLiveIndex(this.dealer);
     }
     this.generation += 1;
@@ -217,6 +222,25 @@ class PokerGame {
       if (this.players[index].chips > 0) return index;
     }
     return 0;
+  }
+
+  canRebuy(player) {
+    return player.chips <= 0 && player.buyInsUsed < this.maxBuyIns;
+  }
+
+  canContinueMatch() {
+    const humanAvailable = this.human.chips > 0 || this.canRebuy(this.human);
+    const cpuAvailable = this.players.some((player) => !player.human && (player.chips > 0 || this.canRebuy(player)));
+    return humanAvailable && cpuAvailable;
+  }
+
+  rebuyBustedPlayers() {
+    this.players.forEach((player) => {
+      if (!this.canRebuy(player)) return;
+      player.chips = this.startingChips;
+      player.buyInsUsed += 1;
+      this.log(`${player.name} 重新买入 ${this.startingChips}（${player.buyInsUsed}/${this.maxBuyIns}）`, player.human ? "human" : "system");
+    });
   }
 
   orderedAfter(index) {
@@ -520,14 +544,15 @@ class PokerGame {
     this.disableControls(message);
     this.ui.message.textContent = message;
     this.ui.nextHand.hidden = false;
-    if (this.human.chips <= 0) {
+    if (this.human.chips <= 0 && !this.canRebuy(this.human)) {
       this.ui.nextHand.textContent = "重新开始";
-      this.ui.message.textContent = "你的筹码已用完";
-    } else if (!this.players.some((player) => !player.human && player.chips > 0)) {
+      this.ui.message.textContent = "你的买入次数已用完";
+    } else if (!this.players.some((player) => !player.human && (player.chips > 0 || this.canRebuy(player)))) {
       this.ui.nextHand.textContent = "重新开始";
-      this.ui.message.textContent = "你赢下了整张牌桌";
+      this.ui.message.textContent = "所有 CPU 的买入次数均已用完";
     } else {
       this.ui.nextHand.textContent = "下一手";
+      if (this.human.chips <= 0) this.ui.message.textContent = "下一手将为你自动重新买入";
     }
     this.render();
   }
@@ -564,14 +589,15 @@ class PokerGame {
         <div class="badges">${badges.join("")}</div>
         <div class="seat-name"><strong>${player.name}</strong><span class="chips">${player.chips}</span></div>
         <div class="seat-cards"></div>
-        <div class="seat-meta">${player.lastAction || (player.chips <= 0 ? "出局" : "")}</div>`;
+        <div class="seat-meta"></div>`;
       const cards = seat.querySelector(".seat-cards");
       if (player.hole?.length) {
         player.hole.forEach((card) => cards.append(this.cardElement(card, true, !player.human && !this.showdown)));
       }
-      if (player.human && player.hole?.length) {
-        seat.querySelector(".seat-meta").textContent = [this.handLabel(player), player.lastAction].filter(Boolean).join(" · ");
-      }
+      const buyInText = `买入 ${player.buyInsUsed}/${this.maxBuyIns}`;
+      const status = player.chips <= 0 && this.canRebuy(player) ? "等待重新买入" : player.chips <= 0 ? "出局" : player.lastAction;
+      const hand = player.human && player.hole?.length ? this.handLabel(player) : "";
+      seat.querySelector(".seat-meta").textContent = [hand, status, buyInText].filter(Boolean).join(" · ");
       this.ui.seats.append(seat);
     });
   }

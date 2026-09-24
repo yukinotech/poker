@@ -27,6 +27,14 @@
         <label>初始筹码
           <input id="starting-chips" type="number" min="200" step="100" value="2000" />
         </label>
+        <label>每人买入
+          <select id="buy-in-count" aria-label="每位玩家买入次数">
+            <option value="1">1 次</option>
+            <option value="2">2 次</option>
+            <option value="3" selected>3 次</option>
+            <option value="5">5 次</option>
+          </select>
+        </label>
         <button id="new-game" class="button ghost">新游戏</button>
       </div>
     </header>
@@ -94,7 +102,7 @@
 
     <footer>
       <span>单机多人 · No-Limit Hold’em</span>
-      <span>所有数据只保存在当前页面</span>
+      <span>破产后于下一手自动重新买入</span>
     </footer>
   </body>
 </html>

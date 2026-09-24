@@ -23,6 +23,7 @@ class Player:
     folded: bool = False
     contribution: int = 0
     street_bet: int = 0
+    buy_ins_used: int = 1
 
 
 def side_pots(players: list[Player]) -> list[tuple[int, list[Player]]]:
@@ -43,11 +44,17 @@ def side_pots(players: list[Player]) -> list[tuple[int, list[Player]]]:
 class PokerGame:
     """A compact multi-player no-limit Hold'em game."""
 
-    def __init__(self, starting_chips: int = DEFAULT_CHIPS, opponents: int = 3, seed: int | None = None) -> None:
+    def __init__(
+        self, starting_chips: int = DEFAULT_CHIPS, opponents: int = 3, buy_ins: int = 3, seed: int | None = None
+    ) -> None:
         if starting_chips < BIG_BLIND * 2:
             raise ValueError(f"starting chips must be at least {BIG_BLIND * 2}")
         if not 1 <= opponents <= 5:
             raise ValueError("opponents must be between 1 and 5")
+        if not 1 <= buy_ins <= 10:
+            raise ValueError("buy-ins must be between 1 and 10")
+        self.starting_chips = starting_chips
+        self.max_buy_ins = buy_ins
         self.rng = random.Random(seed)
         self.human = Player("你", starting_chips, is_human=True)
         self.cpus = [
@@ -65,20 +72,35 @@ class PokerGame:
     def play(self) -> None:
         self._banner()
         hand_no = 1
-        while self.human.chips > 0 and any(cpu.chips > 0 for cpu in self.cpus):
-            stacks = " · ".join(f"{p.name} {p.chips}" for p in self.players if p.chips > 0)
+        while self._match_can_continue():
+            self._rebuy_busted_players()
+            stacks = " · ".join(
+                f"{p.name} {p.chips}（买入 {p.buy_ins_used}/{self.max_buy_ins}）" for p in self.players if p.chips > 0
+            )
             print(f"\n{'─' * 54}\n第 {hand_no} 手牌  |  {stacks}")
             self._play_hand()
             hand_no += 1
             self.dealer = (self.hand_dealer + 1) % len(self.players)
-            if self.human.chips and any(cpu.chips > 0 for cpu in self.cpus) and not self._continue():
+            if self._match_can_continue() and not self._continue():
                 break
-        if self.human.chips == 0:
-            print("\n你已失去全部筹码。CPU 赢得了比赛。")
-        elif not any(cpu.chips > 0 for cpu in self.cpus):
-            print("\n你清空了所有 CPU 的筹码，赢得比赛！")
+        if self.human.chips == 0 and self.human.buy_ins_used >= self.max_buy_ins:
+            print("\n你的买入次数已用完。CPU 赢得了比赛。")
+        elif not any(cpu.chips > 0 or cpu.buy_ins_used < self.max_buy_ins for cpu in self.cpus):
+            print("\n所有 CPU 的买入次数均已用完，你赢得比赛！")
         else:
             print("\n游戏结束。" + " · ".join(f"{p.name} {p.chips}" for p in self.players))
+
+    def _match_can_continue(self) -> bool:
+        human_available = self.human.chips > 0 or self.human.buy_ins_used < self.max_buy_ins
+        cpu_available = any(cpu.chips > 0 or cpu.buy_ins_used < self.max_buy_ins for cpu in self.cpus)
+        return human_available and cpu_available
+
+    def _rebuy_busted_players(self) -> None:
+        for player in self.players:
+            if player.chips == 0 and player.buy_ins_used < self.max_buy_ins:
+                player.chips = self.starting_chips
+                player.buy_ins_used += 1
+                print(f"\n{player.name} 重新买入 {self.starting_chips}（{player.buy_ins_used}/{self.max_buy_ins}）。")
 
     def _play_hand(self) -> None:
         deck = Deck(self.rng)

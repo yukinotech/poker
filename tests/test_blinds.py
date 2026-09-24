@@ -46,6 +46,21 @@ class BlindTests(unittest.TestCase):
         self.assertEqual(sum(player.chips for player in game.players) + game.pot, 400)
         self.assertIn("CPU 1 跟注 40，底池 120。", output.getvalue())
 
+    def test_every_player_can_rebuy_until_limit(self) -> None:
+        game = PokerGame(starting_chips=200, opponents=2, buy_ins=3, seed=1)
+        for player in game.players:
+            player.chips = 0
+        with contextlib.redirect_stdout(io.StringIO()):
+            game._rebuy_busted_players()
+        self.assertTrue(all(player.chips == 200 for player in game.players))
+        self.assertTrue(all(player.buy_ins_used == 2 for player in game.players))
+
+    def test_match_ends_when_human_has_no_buy_ins_left(self) -> None:
+        game = PokerGame(starting_chips=200, opponents=1, buy_ins=2, seed=1)
+        game.human.chips = 0
+        game.human.buy_ins_used = 2
+        self.assertFalse(game._match_can_continue())
+
 
 if __name__ == "__main__":
     unittest.main()
