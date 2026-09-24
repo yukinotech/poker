@@ -83,13 +83,13 @@ class PokerGame:
                 player.hand.extend(deck.deal())
         for player in live:
             self._take(player, min(2, player.chips))
-        print(f"底注 2  |  {len(live)} 人底池 {self.pot}\n你的手牌  {show_cards(self.human.hand)}")
+        print(f"底注已投入：每人 2，起始底池 {self.pot}")
 
         streets = (("翻牌前", 0, 4), ("翻牌", 3, 4), ("转牌", 1, 8), ("河牌", 1, 8))
         for name, count, bet in streets:
             if count:
                 self.board.extend(deck.deal(count))
-            print(f"\n{name}  {show_cards(self.board)}  |  底池 {self.pot}")
+            self._print_table(name)
             if self._betting_round(bet):
                 return
             if len(self._active()) > 1 and all(p.chips == 0 for p in self._active()):
@@ -101,16 +101,19 @@ class PokerGame:
     def _betting_round(self, base_bet: int) -> bool:
         order = [p for p in self._seat_order() if not p.folded and p.chips > 0]
         checked: list[Player] = []
+        announced_checks = 0
         bettor: Player | None = None
         wager = 0
         for player in order:
             if player.is_human:
+                self._announce_checks(checked[announced_checks:])
+                announced_checks = len(checked)
+                self._print_human_state()
                 action = self._ask("你的行动 [c]过牌  [b]下注: ", {"c", "b"})
             else:
                 action = self._cpu_open_action(player)
-                if action == "c":
-                    print(f"{player.name} 过牌。")
             if action == "b":
+                self._announce_checks(checked[announced_checks:])
                 wager = min(base_bet, player.chips)
                 self._take(player, wager)
                 bettor = player
@@ -118,31 +121,91 @@ class PokerGame:
                 break
             checked.append(player)
         if bettor is None:
+            self._announce_checks(checked[announced_checks:])
+            print(f"本轮无人下注，底池保持 {self.pot}。")
             return False
 
         bettor_index = order.index(bettor)
         responders = order[bettor_index + 1 :] + checked
+        cpu_calls: list[str] = []
+        cpu_folds: list[str] = []
         for player in responders:
             if player.folded or player.chips == 0:
                 continue
             call_amount = min(wager, player.chips)
-            action = (
-                self._ask(f"面对 {wager} 下注 [c]跟注  [f]弃牌: ", {"c", "f"})
-                if player.is_human
-                else self._cpu_call_action(player, call_amount)
-            )
+            if player.is_human:
+                self._announce_responses(cpu_calls, cpu_folds)
+                cpu_calls, cpu_folds = [], []
+                self._print_human_state(call_amount)
+                action = self._ask(f"面对 {wager} 下注 [c]跟注  [f]弃牌: ", {"c", "f"})
+            else:
+                action = self._cpu_call_action(player, call_amount)
             if action == "f":
                 player.folded = True
-                print(f"{player.name} 弃牌。")
+                if player.is_human:
+                    print("你弃牌。")
+                else:
+                    cpu_folds.append(player.name)
             else:
                 self._take(player, call_amount)
                 suffix = "（全下）" if player.chips == 0 else ""
-                print(f"{player.name} 跟注 {call_amount}{suffix}。")
+                if player.is_human:
+                    print(f"你跟注 {call_amount}{suffix}，底池更新为 {self.pot}。")
+                else:
+                    cpu_calls.append(f"{player.name}{suffix}")
             if len(self._active()) == 1:
+                self._announce_responses(cpu_calls, cpu_folds)
                 self._award_uncontested(self._active()[0])
                 return True
-        print(f"当前底池 {self.pot}，{len(self._active())} 人在池。")
+        self._announce_responses(cpu_calls, cpu_folds)
+        print(f"本轮结束：底池 {self.pot} · {len(self._active())} 人在池。")
         return False
+
+    def _print_table(self, street: str) -> None:
+        board = show_cards(self.board) if self.board else "—"
+        print(f"\n┌─ {street} {'─' * max(1, 42 - len(street))}")
+        print(f"│ 公共牌  {board}")
+        print(f"│ 你的牌  {show_cards(self.human.hand)}  ·  {self._human_hand_label()}")
+        print(f"└─ 底池 {self.pot} · 你的筹码 {self.human.chips} · {len(self._active())} 人在池")
+
+    def _print_human_state(self, call_amount: int | None = None) -> None:
+        board = show_cards(self.board) if self.board else "—"
+        cost = ""
+        if call_amount is not None:
+            pot_odds = call_amount / (self.pot + call_amount)
+            cost = f" · 跟注需 {call_amount} · 底池赔率 {pot_odds:.0%}"
+        print(f"  你的牌 {show_cards(self.human.hand)}（{self._human_hand_label()}） |  公共牌 {board}")
+        print(f"  底池 {self.pot} · 你的筹码 {self.human.chips} · {len(self._active())} 人在池{cost}")
+
+    def _human_hand_label(self) -> str:
+        if len(self.human.hand) + len(self.board) >= 5:
+            return describe(evaluate(self.human.hand + self.board))
+        first, second = self.human.hand
+        if first.rank == second.rank:
+            return "口袋对子"
+        if first.suit == second.suit:
+            return "同花起手牌"
+        if abs(first.rank - second.rank) <= 2:
+            return "连张起手牌"
+        return "高牌起手牌"
+
+    @staticmethod
+    def _announce_checks(players: list[Player]) -> None:
+        cpus = [player for player in players if not player.is_human]
+        if len(cpus) == 1:
+            print(f"{cpus[0].name} 过牌。")
+        elif cpus:
+            print(f"{len(cpus)} 位 CPU 过牌。")
+
+    @staticmethod
+    def _announce_responses(calls: list[str], folds: list[str]) -> None:
+        parts: list[str] = []
+        if calls:
+            parts.append(f"{'、'.join(calls)} 跟注")
+        if folds:
+            parts.append(f"{'、'.join(folds)} 弃牌")
+        if parts:
+            print("；".join(parts) + "。")
 
     def _cpu_open_action(self, player: Player) -> str:
         strength, draw = self._cpu_strength(player)

@@ -36,6 +36,22 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(sum(player.chips for player in self.game.players), total)
         self.assertEqual(self.game.pot, 0)
 
+    def test_human_decision_view_repeats_essential_information(self) -> None:
+        from poker.cards import Card
+
+        self.game.human.hand = [Card(14, "s"), Card(13, "s")]
+        self.game.board = [Card(12, "s"), Card(7, "c"), Card(3, "h")]
+        self.game.pot = 24
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.game._print_human_state(call_amount=8)
+        text = output.getvalue()
+        self.assertIn("[♠A]", text)
+        self.assertIn("[♠Q]", text)
+        self.assertIn("底池 24", text)
+        self.assertIn("跟注需 8", text)
+        self.assertIn("底池赔率 25%", text)
+
 
 if __name__ == "__main__":
     unittest.main()
