@@ -102,6 +102,7 @@ class PokerGame {
       checkCall: document.querySelector("#check-call"),
       betRaise: document.querySelector("#bet-raise"),
       allIn: document.querySelector("#all-in"),
+      superReveal: document.querySelector("#super-reveal"),
       nextHand: document.querySelector("#next-hand"),
       log: document.querySelector("#action-log"),
       opponents: document.querySelector("#opponent-count"),
@@ -127,6 +128,7 @@ class PokerGame {
     this.ui.checkCall.addEventListener("click", () => this.submitHuman("call"));
     this.ui.betRaise.addEventListener("click", () => this.submitHuman("raise", Number(this.ui.amount.value)));
     this.ui.allIn.addEventListener("click", () => this.submitHuman("raise", this.human.streetBet + this.human.chips));
+    this.ui.superReveal.addEventListener("click", () => this.revealAllHands());
     this.ui.nextHand.addEventListener("click", () => this.startNextHand());
   }
 
@@ -170,12 +172,16 @@ class PokerGame {
     this.handNumber += 1;
     this.handOver = false;
     this.showdown = false;
+    this.superMode = false;
     this.currentActor = null;
     this.deck = makeDeck();
     this.board = [];
     this.street = 0;
     this.raisesThisStreet = 0;
     this.ui.nextHand.hidden = true;
+    this.ui.superReveal.hidden = true;
+    this.ui.superReveal.disabled = false;
+    this.ui.superReveal.textContent = "超级模式 · 查看所有手牌";
     this.players.forEach((player) => Object.assign(player, {
       hole: [], folded: player.chips <= 0, allIn: false, contribution: 0, streetBet: 0, lastAction: player.chips <= 0 ? "出局" : "",
     }));
@@ -544,6 +550,7 @@ class PokerGame {
     this.disableControls(message);
     this.ui.message.textContent = message;
     this.ui.nextHand.hidden = false;
+    this.ui.superReveal.hidden = false;
     if (this.human.chips <= 0 && !this.canRebuy(this.human)) {
       this.ui.nextHand.textContent = "重新开始";
       this.ui.message.textContent = "你的买入次数已用完";
@@ -554,6 +561,15 @@ class PokerGame {
       this.ui.nextHand.textContent = "下一手";
       if (this.human.chips <= 0) this.ui.message.textContent = "下一手将为你自动重新买入";
     }
+    this.render();
+  }
+
+  revealAllHands() {
+    if (!this.handOver || this.superMode) return;
+    this.superMode = true;
+    this.ui.superReveal.disabled = true;
+    this.ui.superReveal.textContent = "超级模式已开启";
+    this.log("超级模式：已展示本手所有玩家的底牌", "system");
     this.render();
   }
 
@@ -592,7 +608,9 @@ class PokerGame {
         <div class="seat-meta"></div>`;
       const cards = seat.querySelector(".seat-cards");
       if (player.hole?.length) {
-        player.hole.forEach((card) => cards.append(this.cardElement(card, true, !player.human && !this.showdown)));
+        const visibleAtShowdown = this.showdown && !player.folded;
+        const hidden = !player.human && !visibleAtShowdown && !this.superMode;
+        player.hole.forEach((card) => cards.append(this.cardElement(card, true, hidden)));
       }
       const buyInText = `买入 ${player.buyInsUsed}/${this.maxBuyIns}`;
       const status = player.chips <= 0 && this.canRebuy(player) ? "等待重新买入" : player.chips <= 0 ? "出局" : player.lastAction;

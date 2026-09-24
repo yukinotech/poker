@@ -195,7 +195,11 @@ input[type="range"] { accent-color: var(--gold); }
 .button.danger { background: transparent; border-color: rgba(222,104,94,.58); color: #f09a91; }
 .button.all-in { background: #713e68; }
 .button.ghost { min-height: 36px; background: transparent; border-color: var(--line); color: var(--text); }
-.next-hand { width: 100%; margin-top: 10px; }
+.hand-end-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.hand-end-actions:has([hidden] + [hidden]) { display: none; }
+.next-hand { width: 100%; }
+.button.super-mode { color: #f3d989; background: rgba(225, 185, 87, 0.08); border-color: rgba(225, 185, 87, 0.55); }
+.button.super-mode:hover:not(:disabled) { background: rgba(225, 185, 87, 0.16); }
 
 .log-panel { margin-top: 0; height: calc(100vh - 126px); min-height: 640px; overflow: hidden; display: flex; flex-direction: column; }
 .log-heading { padding: 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
@@ -236,5 +240,6 @@ footer { padding: 12px clamp(18px, 4vw, 56px) 24px; display: flex; justify-conte
   .sizing { grid-template-columns: 1fr auto; }
   .quick-sizes { grid-column: 1 / -1; }
   .action-buttons { grid-template-columns: repeat(2, 1fr); }
+  .hand-end-actions { grid-template-columns: 1fr; }
   footer { flex-direction: column; gap: 5px; }
 }
