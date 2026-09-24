@@ -33,16 +33,18 @@ class BlindTests(unittest.TestCase):
         game._set_blind_positions(game.players)
         game._take(game.small_blind_player, SMALL_BLIND)
         game._take(game.big_blind_player, BIG_BLIND)
+        output = io.StringIO()
         with (
             patch("builtins.input", return_value="r 60"),
             patch.object(game, "_cpu_action", return_value=("c", 0)),
-            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stdout(output),
         ):
             game._betting_round(preflop=True)
         self.assertEqual(game.pot, 120)
         self.assertEqual(game.human.street_bet, 60)
         self.assertEqual(game.cpus[0].street_bet, 60)
         self.assertEqual(sum(player.chips for player in game.players) + game.pot, 400)
+        self.assertIn("CPU 1 跟注 40，底池 120。", output.getvalue())
 
 
 if __name__ == "__main__":

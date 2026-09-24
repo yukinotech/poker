@@ -121,16 +121,6 @@ class PokerGame:
         queue = order.copy()
         current_bet = max((player.street_bet for player in self._active()), default=0)
         min_raise = BIG_BLIND
-        checked: list[Player] = []
-        cpu_calls: list[str] = []
-        cpu_folds: list[str] = []
-
-        def flush_summary() -> None:
-            self._announce_checks(checked)
-            self._announce_responses(cpu_calls, cpu_folds)
-            checked.clear()
-            cpu_calls.clear()
-            cpu_folds.clear()
 
         while queue:
             player = queue.pop(0)
@@ -138,7 +128,6 @@ class PokerGame:
                 continue
             to_call = max(0, current_bet - player.street_bet)
             if player.is_human:
-                flush_summary()
                 self._print_human_state(to_call if to_call else None)
                 action, target = self._human_action(player, to_call, current_bet, min_raise)
             else:
@@ -149,7 +138,7 @@ class PokerGame:
                 if player.is_human:
                     print("你弃牌。")
                 else:
-                    cpu_folds.append(player.name)
+                    print(f"{player.name} 弃牌。")
             elif action == "c":
                 call_amount = min(to_call, player.chips)
                 self._take(player, call_amount)
@@ -159,11 +148,10 @@ class PokerGame:
                     print(f"你{verb}，底池 {self.pot}。")
                 else:
                     if call_amount == 0:
-                        checked.append(player)
+                        print(f"{player.name} 过牌。")
                     else:
-                        cpu_calls.append(f"{player.name}{suffix}")
+                        print(f"{player.name} 跟注 {call_amount}{suffix}，底池 {self.pot}。")
             else:
-                flush_summary()
                 old_bet = current_bet
                 target = min(target, player.street_bet + player.chips)
                 self._take(player, target - player.street_bet)
@@ -188,10 +176,8 @@ class PokerGame:
                         if p is not player and not p.folded and p.chips > 0
                     ]
             if len(self._active()) == 1:
-                flush_summary()
                 self._award_uncontested(self._active()[0])
                 return True
-        flush_summary()
         print(f"本轮结束：底池 {self.pot} · {len(self._active())} 人在池。")
         return False
 
@@ -279,13 +265,11 @@ class PokerGame:
         print(f"└─ 底池 {self.pot} · 你的筹码 {self.human.chips} · {len(self._active())} 人在池")
 
     def _print_human_state(self, call_amount: int | None = None) -> None:
-        board = show_cards(self.board) if self.board else "—"
         cost = ""
         if call_amount is not None:
             pot_odds = call_amount / (self.pot + call_amount)
             cost = f" · 跟注需 {call_amount} · 底池赔率 {pot_odds:.0%}"
-        print(f"  你的牌 {show_cards(self.human.hand)}（{self._human_hand_label()}） |  公共牌 {board}")
-        print(f"  底池 {self.pot} · 你的筹码 {self.human.chips} · {len(self._active())} 人在池{cost}")
+        print(f"→ 轮到你：底池 {self.pot} · 筹码 {self.human.chips} · {len(self._active())} 人在池{cost}")
 
     def _human_hand_label(self) -> str:
         if len(self.human.hand) + len(self.board) >= 5:
@@ -298,24 +282,6 @@ class PokerGame:
         if abs(first.rank - second.rank) <= 2:
             return "连张起手牌"
         return "高牌起手牌"
-
-    @staticmethod
-    def _announce_checks(players: list[Player]) -> None:
-        cpus = [player for player in players if not player.is_human]
-        if len(cpus) == 1:
-            print(f"{cpus[0].name} 过牌。")
-        elif cpus:
-            print(f"{len(cpus)} 位 CPU 过牌。")
-
-    @staticmethod
-    def _announce_responses(calls: list[str], folds: list[str]) -> None:
-        parts: list[str] = []
-        if calls:
-            parts.append(f"{'、'.join(calls)} 跟注")
-        if folds:
-            parts.append(f"{'、'.join(folds)} 弃牌")
-        if parts:
-            print("；".join(parts) + "。")
 
     def _cpu_strength(self, player: Player) -> tuple[float, float]:
         cards = player.hand + self.board
