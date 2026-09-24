@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#12251d" />
+    <title>Poker · 单机德州扑克</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="game.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Poker 首页">
+        <span class="brand-suits">♠ ♥ ♦ ♣</span>
+        <strong>POKER</strong>
+      </a>
+      <div class="settings">
+        <label>CPU
+          <select id="opponent-count" aria-label="CPU 对手数量">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
+        <label>初始筹码
+          <input id="starting-chips" type="number" min="200" step="100" value="2000" />
+        </label>
+        <button id="new-game" class="button ghost">新游戏</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="game-column" aria-label="扑克游戏区">
+        <div class="statusbar">
+          <div><span class="muted">级别</span><strong>10 / 20</strong></div>
+          <div><span class="muted">阶段</span><strong id="street-label">等待开始</strong></div>
+          <div><span class="muted">手牌</span><strong id="hand-number">#1</strong></div>
+        </div>
+
+        <div id="table" class="poker-table">
+          <div id="seats" class="seats" aria-label="玩家座位"></div>
+          <div class="table-center">
+            <div id="board" class="board" aria-label="公共牌"></div>
+            <div class="pot"><span>底池</span><strong id="pot">0</strong></div>
+            <div id="table-message" class="table-message">准备发牌</div>
+          </div>
+        </div>
+
+        <section id="controls" class="controls" aria-label="玩家操作">
+          <div class="decision-row">
+            <div>
+              <span class="eyebrow">轮到你</span>
+              <strong id="decision-text">等待其他玩家行动</strong>
+            </div>
+            <div id="odds-text" class="odds"></div>
+          </div>
+
+          <div id="sizing" class="sizing">
+            <input id="bet-slider" type="range" min="20" max="2000" step="10" value="40" aria-label="下注金额" />
+            <div class="amount-input">
+              <span>下注到</span>
+              <input id="bet-amount" type="number" min="20" step="10" value="40" aria-label="下注目标金额" />
+            </div>
+            <div class="quick-sizes" aria-label="快捷下注尺度">
+              <button data-size="0.5">½ 池</button>
+              <button data-size="0.75">¾ 池</button>
+              <button data-size="1">满池</button>
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button id="fold" class="button danger" disabled>弃牌</button>
+            <button id="check-call" class="button secondary" disabled>过牌</button>
+            <button id="bet-raise" class="button primary" disabled>下注</button>
+            <button id="all-in" class="button all-in" disabled>全下</button>
+          </div>
+          <button id="next-hand" class="button primary next-hand" hidden>下一手</button>
+        </section>
+      </section>
+
+      <aside class="log-panel" aria-label="行动记录">
+        <div class="log-heading">
+          <div>
+            <span class="eyebrow">ACTION</span>
+            <h2>行动记录</h2>
+          </div>
+          <button id="clear-log" class="icon-button" title="清空记录" aria-label="清空行动记录">清空</button>
+        </div>
+        <ol id="action-log" class="action-log" aria-live="polite"></ol>
+      </aside>
+    </main>
+
+    <footer>
+      <span>单机多人 · No-Limit Hold’em</span>
+      <span>所有数据只保存在当前页面</span>
+    </footer>
+  </body>
+</html>

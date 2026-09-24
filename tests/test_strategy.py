@@ -37,6 +37,16 @@ class StrategyTests(unittest.TestCase):
             action, target = self.game._human_action(self.game.human, 20, 20, 20)
         self.assertEqual((action, target), ("r", 120))
 
+    def test_compact_raise_without_space_is_accepted(self) -> None:
+        with patch("builtins.input", return_value="r100"):
+            action, target = self.game._human_action(self.game.human, 20, 20, 20)
+        self.assertEqual((action, target), ("r", 100))
+
+    def test_compact_bet_without_space_is_accepted(self) -> None:
+        with patch("builtins.input", return_value="b60"):
+            action, target = self.game._human_action(self.game.human, 0, 0, 20)
+        self.assertEqual((action, target), ("r", 60))
+
     def test_human_can_go_all_in(self) -> None:
         self.game.human.street_bet = 10
         with patch("builtins.input", return_value="a"):

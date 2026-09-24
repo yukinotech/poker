@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
 
 from .cards import Card, Deck, show_cards
@@ -200,10 +201,12 @@ class PokerGame:
                 options.append("[a]全下")
                 prompt = "行动 " + "  ".join(options) + ": "
             try:
-                parts = input(prompt).strip().lower().split()
+                raw = input(prompt).strip().lower()
             except (EOFError, KeyboardInterrupt):
                 print("\n已离开牌桌。")
                 raise SystemExit(0)
+            compact_amount = re.fullmatch(r"(b|bet|下注|r|raise|加注)\s*(\d+)", raw)
+            parts = list(compact_amount.groups()) if compact_amount else raw.split()
             if not parts:
                 continue
             command = parts[0]
