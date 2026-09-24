@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 from .cards import Card, Deck, show_cards
 from .evaluator import describe, evaluate
 
+SMALL_BLIND = 10
+BIG_BLIND = 20
+SMALL_BET = 20
+BIG_BET = 40
+DEFAULT_CHIPS = 2000
+
 
 @dataclass
 class Player:
@@ -17,6 +23,7 @@ class Player:
     hand: list[Card] = field(default_factory=list)
     folded: bool = False
     contribution: int = 0
+    street_bet: int = 0
 
 
 def side_pots(players: list[Player]) -> list[tuple[int, list[Player]]]:
@@ -37,9 +44,9 @@ def side_pots(players: list[Player]) -> list[tuple[int, list[Player]]]:
 class PokerGame:
     """Multi-player, fixed-limit Hold'em with one bet allowed per street."""
 
-    def __init__(self, starting_chips: int = 100, opponents: int = 3, seed: int | None = None) -> None:
-        if starting_chips < 10:
-            raise ValueError("starting chips must be at least 10")
+    def __init__(self, starting_chips: int = DEFAULT_CHIPS, opponents: int = 3, seed: int | None = None) -> None:
+        if starting_chips < BIG_BET:
+            raise ValueError(f"starting chips must be at least {BIG_BET}")
         if not 1 <= opponents <= 5:
             raise ValueError("opponents must be between 1 and 5")
         self.rng = random.Random(seed)
@@ -52,6 +59,9 @@ class PokerGame:
         self.pot = 0
         self.board: list[Card] = []
         self.dealer = 0
+        self.hand_dealer = 0
+        self.small_blind_player = self.human
+        self.big_blind_player = self.cpus[0]
 
     def play(self) -> None:
         self._banner()
@@ -61,7 +71,7 @@ class PokerGame:
             print(f"\n{'─' * 54}\n第 {hand_no} 手牌  |  {stacks}")
             self._play_hand()
             hand_no += 1
-            self.dealer = (self.dealer + 1) % len(self.players)
+            self.dealer = (self.hand_dealer + 1) % len(self.players)
             if self.human.chips and any(cpu.chips > 0 for cpu in self.cpus) and not self._continue():
                 break
         if self.human.chips == 0:
@@ -76,21 +86,36 @@ class PokerGame:
         self.board, self.pot = [], 0
         live = [p for p in self.players if p.chips > 0]
         for player in self.players:
-            player.hand, player.contribution = [], 0
+            player.hand, player.contribution, player.street_bet = [], 0, 0
             player.folded = player.chips == 0
         for _ in range(2):
             for player in live:
                 player.hand.extend(deck.deal())
-        for player in live:
-            self._take(player, min(2, player.chips))
-        print(f"底注已投入：每人 2，起始底池 {self.pot}")
+        self._set_blind_positions(live)
+        small_paid = min(SMALL_BLIND, self.small_blind_player.chips)
+        big_paid = min(BIG_BLIND, self.big_blind_player.chips)
+        self._take(self.small_blind_player, small_paid)
+        self._take(self.big_blind_player, big_paid)
+        print(
+            f"级别 {SMALL_BLIND}/{BIG_BLIND}  |  庄家 {self.players[self.hand_dealer].name}  |  "
+            f"小盲 {self.small_blind_player.name} {small_paid}  |  大盲 {self.big_blind_player.name} {big_paid}"
+        )
 
-        streets = (("翻牌前", 0, 4), ("翻牌", 3, 4), ("转牌", 1, 8), ("河牌", 1, 8))
-        for name, count, bet in streets:
+        streets = (
+            ("翻牌前", 0, SMALL_BET, True),
+            ("翻牌", 3, SMALL_BET, False),
+            ("转牌", 1, BIG_BET, False),
+            ("河牌", 1, BIG_BET, False),
+        )
+        for name, count, bet, preflop in streets:
+            if not preflop:
+                for player in self.players:
+                    player.street_bet = 0
             if count:
                 self.board.extend(deck.deal(count))
             self._print_table(name)
-            if self._betting_round(bet):
+            hand_over = self._preflop_round() if preflop else self._betting_round(bet)
+            if hand_over:
                 return
             if len(self._active()) > 1 and all(p.chips == 0 for p in self._active()):
                 self.board.extend(deck.deal(5 - len(self.board)))
@@ -127,12 +152,24 @@ class PokerGame:
 
         bettor_index = order.index(bettor)
         responders = order[bettor_index + 1 :] + checked
+        return self._resolve_wager(bettor, wager, responders)
+
+    def _preflop_round(self) -> bool:
+        wager = max(player.street_bet for player in self._active())
+        bettor = max(self._active(), key=lambda player: player.street_bet)
+        order = self._seat_order(after=self.players.index(self.big_blind_player))
+        responders = [player for player in order if player is not bettor and not player.folded and player.chips > 0]
+        return self._resolve_wager(bettor, wager, responders)
+
+    def _resolve_wager(self, bettor: Player, wager: int, responders: list[Player]) -> bool:
         cpu_calls: list[str] = []
         cpu_folds: list[str] = []
         for player in responders:
             if player.folded or player.chips == 0:
                 continue
-            call_amount = min(wager, player.chips)
+            call_amount = min(max(0, wager - player.street_bet), player.chips)
+            if call_amount == 0:
+                continue
             if player.is_human:
                 self._announce_responses(cpu_calls, cpu_folds)
                 cpu_calls, cpu_folds = [], []
@@ -272,14 +309,39 @@ class PokerGame:
     def _active(self) -> list[Player]:
         return [p for p in self.players if p.hand and not p.folded]
 
-    def _seat_order(self) -> list[Player]:
-        start = (self.dealer + 1) % len(self.players)
+    def _seat_order(self, after: int | None = None) -> list[Player]:
+        start = ((self.hand_dealer if after is None else after) + 1) % len(self.players)
         return self.players[start:] + self.players[:start]
+
+    def _set_blind_positions(self, live: list[Player]) -> None:
+        live_indices = {self.players.index(player) for player in live}
+        self.hand_dealer = next(
+            index % len(self.players)
+            for index in range(self.dealer, self.dealer + len(self.players))
+            if index % len(self.players) in live_indices
+        )
+
+        def next_live(after: int) -> int:
+            return next(
+                index % len(self.players)
+                for index in range(after + 1, after + 1 + len(self.players))
+                if index % len(self.players) in live_indices
+            )
+
+        if len(live) == 2:
+            small_index = self.hand_dealer
+            big_index = next_live(self.hand_dealer)
+        else:
+            small_index = next_live(self.hand_dealer)
+            big_index = next_live(small_index)
+        self.small_blind_player = self.players[small_index]
+        self.big_blind_player = self.players[big_index]
 
     def _take(self, player: Player, amount: int) -> None:
         amount = min(amount, player.chips)
         player.chips -= amount
         player.contribution += amount
+        player.street_bet += amount
         self.pot += amount
 
     def _award_uncontested(self, player: Player) -> None:
@@ -311,4 +373,4 @@ class PokerGame:
     @staticmethod
     def _banner() -> None:
         print("♠ ♥ ♦ ♣  P O K E R")
-        print("简洁的多人单机德州扑克 · 固定限注")
+        print(f"简洁的多人单机德州扑克 · {SMALL_BLIND}/{BIG_BLIND} 固定限注")

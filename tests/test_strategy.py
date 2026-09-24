@@ -8,7 +8,7 @@ from poker.game import PokerGame
 
 class StrategyTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = PokerGame(starting_chips=20, opponents=3, seed=7)
+        self.game = PokerGame(starting_chips=200, opponents=3, seed=7)
         self.cpu = self.game.cpus[0]
 
     def test_value_end_of_range_bets(self) -> None:
