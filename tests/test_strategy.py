@@ -15,19 +15,34 @@ class StrategyTests(unittest.TestCase):
         with patch.object(self.game, "_cpu_strength", return_value=(0.9, 0.0)), patch.object(
             self.game.rng, "random", return_value=0.5
         ):
-            self.assertEqual(self.game._cpu_open_action(self.cpu), "b")
+            action, target = self.game._cpu_action(self.cpu, 0, 0, 20)
+        self.assertEqual(action, "r")
+        self.assertGreaterEqual(target, 20)
 
     def test_medium_strength_checks(self) -> None:
         with patch.object(self.game, "_cpu_strength", return_value=(0.52, 0.0)), patch.object(
             self.game.rng, "random", return_value=0.5
         ):
-            self.assertEqual(self.game._cpu_open_action(self.cpu), "c")
+            self.assertEqual(self.game._cpu_action(self.cpu, 0, 0, 20)[0], "c")
 
     def test_weak_end_can_bluff(self) -> None:
         with patch.object(self.game, "_cpu_strength", return_value=(0.2, 0.0)), patch.object(
             self.game.rng, "random", return_value=0.0
         ):
-            self.assertEqual(self.game._cpu_open_action(self.cpu), "b")
+            self.assertEqual(self.game._cpu_action(self.cpu, 0, 0, 20)[0], "r")
+
+    def test_human_can_choose_custom_raise_size(self) -> None:
+        self.game.human.street_bet = 0
+        with patch("builtins.input", return_value="r 120"):
+            action, target = self.game._human_action(self.game.human, 20, 20, 20)
+        self.assertEqual((action, target), ("r", 120))
+
+    def test_human_can_go_all_in(self) -> None:
+        self.game.human.street_bet = 10
+        with patch("builtins.input", return_value="a"):
+            action, target = self.game._human_action(self.game.human, 10, 20, 20)
+        self.assertEqual(action, "r")
+        self.assertEqual(target, 210)
 
     def test_multiway_hand_conserves_all_chips(self) -> None:
         total = sum(player.chips for player in self.game.players)
